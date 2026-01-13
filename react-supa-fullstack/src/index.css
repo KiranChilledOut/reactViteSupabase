@@ -3,4 +3,22 @@
 *{
   font-family: "Montserrat", sans-serif !important;
   box-sizing: border-box;
+  font-weight: 500;
+}
+
+.font-bold {
+  font-weight: 700 !important;
+}
+
+.font-semibold {
+  font-weight: 600 !important;
+}
+
+.ant-form-item{
+  margin-bottom: 0px !important;
+}
+
+.ant-form-item-label{
+  padding: 0 !important;
+  margin: 0 !important;
 }
