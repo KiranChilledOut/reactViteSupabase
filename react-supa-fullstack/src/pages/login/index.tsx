@@ -1,9 +1,35 @@
-import { Form, Input, Button } from "antd";
-import { Link } from "react-router-dom";
+import { Form, Input, Button, message } from "antd";
+import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { loginUser } from "../../services/users";
+
 
 function LoginPage() {
-    const onFinish = (values: any) => { console.log("Received Form Values",values); };
+    const [messageApi, contextHolder] = message.useMessage();
+    const [loading, setLoading] = useState(false);
+    const navigate = useNavigate();
+    const onFinish = async (values: any) => {
+        try {
+            setLoading(true)
+            const response: any = await loginUser(values)
+            if (!response.success) {
+                throw new Error(response.error.message);
+            }
+            messageApi.open({
+                type: "success",
+                content: "Login Succesful",
+                duration: 2,
+                onClose: () => navigate("/"),
+            });
+
+        } catch (error: any) {
+            messageApi.error(error.message || "Something went wrong")
+        } finally {
+            setLoading(false)
+        }
+    };
     return <div className="bg-gray-200 h-screen flex justify-center items-center">
+        {contextHolder}
         <div className="bg-white border border-gray-300 shadow-sm p-5 rounded w-105 ">
             <h1 className="text-xl font-bold">
                 Login
@@ -33,7 +59,7 @@ function LoginPage() {
                     <Input.Password placeholder="Email ID" />
 
                 </Form.Item>
-                <Button htmlType="submit" block type="primary" className="mb-3">
+                <Button htmlType="submit" block type="primary" className="mb-3" loading={loading} disabled={loading}>
                     Login
                 </Button>
                 <span className="text-sm font-semibold ">

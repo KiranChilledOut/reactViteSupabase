@@ -36,3 +36,23 @@ export const registerUser = async (values: any) => {
         throw new Error(error.message || "Something went wrong")
     }
 }
+
+export const loginUser = async (values: any) => {
+    try {
+        const loginResponse = await supabaseConfig.auth.signInWithPassword({
+            email: values.email,
+            password: values.password
+        })
+        if (loginResponse.error) {
+            throw new Error(loginResponse.error.message);
+        }
+
+        return {
+            success: true,
+            message: "Login successful"
+        } 
+
+    } catch (error: any) {
+        throw new Error(error.message || "Something went wrong");
+    }
+}

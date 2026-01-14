@@ -260,6 +260,11 @@ Supabase Auth (password) + UX helpers
   - `const [messageApi, contextHolder] = message.useMessage();` gives you toast helpers; render `{contextHolder}` in JSX so messages can mount.
   - Submit handler uses `supabaseConfig.auth.signUp` with the email/password values, shows `messageApi.success` or `messageApi.error`, then navigates to `/login`.
   - AntD button uses `loading={loading}` to show a spinner and `disabled={loading}` to prevent clicks while the async request runs.
+- Login flow in `src/pages/login/index.tsx`:
+  - Uses `loginUser` service (see Services layer) which calls `supabase.auth.signInWithPassword`.
+  - UI: AntD `Form`, `Input`, `Button`; `message.useMessage()` for toasts; `useNavigate` to redirect on success.
+  - Success handler shows a toast (`messageApi.open({ type: "success", ... })`) and navigates to `/` on close; errors use `messageApi.error`.
+  - Button ties to loading state: `loading={loading}` spins and `disabled={loading}` blocks extra clicks during the async call.
 
 Supabase custom attributes (profiles table)
 - In Supabase (Table editor), created `public.user_profiles` with columns:
@@ -315,12 +320,20 @@ Supabase custom attributes (profiles table)
 Services layer
 - File: `react-supa-fullstack/src/services/users.ts`
 - Purpose: keep Supabase auth + profile creation logic out of React components for reuse and cleaner UI code.
-- Current export:
+- Current exports:
   ```ts
   import supabaseConfig from "../config/supabase-config";
 
   export const registerUser = async (values: any) => {
     try {
+      // check if the email is already registered
+      const userExistingResponse = await supabaseConfig
+        .from('user_profiles')
+        .select('*')
+        .eq('email', values.email)
+      if (userExistingResponse.data && userExistingResponse.data.length > 0) {
+        throw new Error("Email already registered. Please login");
+      }
       const signupResponse = await supabaseConfig.auth.signUp({
         email: values.email,
         password: values.password
@@ -331,6 +344,7 @@ Services layer
       const userId = signupResponse.data.user?.id
       const userProfilesTableData = {
         id: userId,
+        email: values.email,
         name: values.name,
         profile_pic: ''
       }
@@ -346,8 +360,23 @@ Services layer
       throw new Error(error.message || "Something went wrong")
     }
   }
+
+  export const loginUser = async (values: any) => {
+    try {
+      const loginResponse = await supabaseConfig.auth.signInWithPassword({
+        email: values.email,
+        password: values.password
+      })
+      if (loginResponse.error) {
+        throw new Error(loginResponse.error.message);
+      }
+      return { success: true, message: "Login successful" }
+    } catch (error: any) {
+      throw new Error(error.message || "Something went wrong");
+    }
+  }
   ```
-- Usage idea in components: call `registerUser(values)` from the Register form, handle success/error with `messageApi` + `navigate`, while keeping network/auth logic centralized here.
+- Usage in components: call `registerUser(values)` from Register and `loginUser(values)` from Login; handle success/error with AntD `messageApi` + `navigate`, while keeping network/auth logic centralized here.
 
 Styles after cleanup
 - Removed `react-supa-fullstack/src/App.css`
