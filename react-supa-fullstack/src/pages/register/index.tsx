@@ -1,9 +1,37 @@
-import { Form, Input, Button } from "antd";
-import { Link } from "react-router-dom";
+import { Form, Input, Button, message } from "antd";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { registerUser } from "../../services/users";
+
+
+
 
 function RegisterPage() {
-    const onFinish = (values: any) => { console.log("Received Form Values",values); };
+    const [loading, setLoading] = useState(false);
+    const navigate = useNavigate();
+    const [messageApi, contextHolder] = message.useMessage();
+    const onFinish = async (values: any) => {
+        try {
+            setLoading(true)
+            const response: any = await registerUser(values)
+            if(!response.success){
+                throw new Error(response.error.message);
+            }
+            messageApi.open({
+                type: "success",
+                content: "Registration successful. Please check your Email to verify!",
+                duration: 2,
+                onClose: () => navigate("/login"),
+            });
+
+        } catch (error: any) {
+            messageApi.error(error.message || "Something went wrong")
+        } finally {
+            setLoading(false)
+        }
+    };
     return <div className="bg-gray-200 h-screen flex justify-center items-center">
+        {contextHolder}
         <div className="bg-white border border-gray-300 shadow-sm p-5 rounded w-105 ">
             <h1 className="text-xl font-bold">
                 Register
@@ -40,10 +68,10 @@ function RegisterPage() {
                         required: true,
                         message: 'Password'
                     }]}>
-                    <Input.Password placeholder="Email ID" />
+                    <Input.Password placeholder="Strong Password" />
 
                 </Form.Item>
-                <Button htmlType="submit" block type="primary" className="mb-3">
+                <Button htmlType="submit" block type="primary" className="mb-3" loading={loading} disabled={loading}>
                     Register
                 </Button>
                 <span className="text-sm font-semibold ">

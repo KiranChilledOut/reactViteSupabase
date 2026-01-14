@@ -182,7 +182,172 @@ Routing setup
   - Layout: centered card with padding, rounded corners, and border/shadow
   - Form fields: Name, Email, Password (`Input.Password`)
   - Actions: Primary `Register` button + link to `/login`
+- Enhanced `LoginPage` with AntD form + Tailwind layout and a register link (`src/pages/login/index.tsx`):
+  ```tsx
+  import { Form, Input, Button } from "antd";
+  import { Link } from "react-router-dom";
 
+  function LoginPage() {
+    const onFinish = (values: any) => { console.log("Received Form Values", values); };
+    return <div className="bg-gray-200 h-screen flex justify-center items-center">
+        <div className="bg-white border border-gray-300 shadow-sm p-5 rounded w-105 ">
+            <h1 className="text-xl font-bold">
+                Login
+            </h1>
+            <p className="text-sm font-semibold text-gray-500 mb-5">
+                Welcome ! Enter Credentials to Login
+            </p>
+            <hr className="border-gray-300 my-5" />
+            <Form onFinish={onFinish} layout="vertical" className="flex flex-col gap-5" autoComplete="off">
+                <Form.Item
+                    label="Email"
+                    name="email"
+                    rules={[{
+                        required: true,
+                        message: 'Please input your Email address'
+                    }]}>
+                    <Input placeholder="Email ID" />
+
+                </Form.Item>
+                <Form.Item
+                    label="Password"
+                    name="password"
+                    rules={[{
+                        required: true,
+                        message: 'Password'
+                    }]}>
+                    <Input.Password placeholder="Email ID" />
+
+                </Form.Item>
+                <Button htmlType="submit" block type="primary" className="mb-3">
+                    Login
+                </Button>
+                <span className="text-sm font-semibold ">
+                    Don't have an account?{" "} <Link to='/register'>Register</Link>
+                </span>
+            </Form>
+        </div>
+    </div>
+  }
+
+  export default LoginPage
+  ```
+  - `Link` from `react-router-dom` performs client-side navigation between `/login` and `/register` without a full page reload, keeping SPA state intact.
+
+Supabase setup
+- Created new Supabase account/org/project.
+- Installed SDK: `npm install @supabase/supabase-js`.
+- Env vars in `.env`:
+  - `VITE_SUPABASE_URL=<project-url>`
+  - `VITE_SUPABASE_PUBLISHABLE_KEY=<anon-public-key>`
+- Config file: `react-supa-fullstack/src/config/supabase-config.ts`
+  ```ts
+  import { createClient } from '@supabase/supabase-js'
+
+  // Create a single supabase client for interacting with your database
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  const supabase = createClient(supabaseUrl, supabaseKey)
+  ```
+- Reference: https://supabase.com/docs/reference/javascript/initializing
+
+Supabase Auth (password) + UX helpers
+- Register flow in `src/pages/register/index.tsx`:
+  - Imports Supabase client (`supabaseConfig`), React state, router, and AntD message: `useState`, `useNavigate`, `message.useMessage()`.
+  - `const [loading, setLoading] = useState(false);` tracks submit state to block duplicate requests and show loading.
+  - `const navigate = useNavigate();` lets you redirect after success (e.g., `navigate('/login')`).
+  - `const [messageApi, contextHolder] = message.useMessage();` gives you toast helpers; render `{contextHolder}` in JSX so messages can mount.
+  - Submit handler uses `supabaseConfig.auth.signUp` with the email/password values, shows `messageApi.success` or `messageApi.error`, then navigates to `/login`.
+  - AntD button uses `loading={loading}` to show a spinner and `disabled={loading}` to prevent clicks while the async request runs.
+
+Supabase custom attributes (profiles table)
+- In Supabase (Table editor), created `public.user_profiles` with columns:
+  - `id` `uuid` (primary key) — foreign key to `auth.users.id`
+  - `created_at` `timestamp` default `now()`
+  - `email` `text` (unique)
+  - `name` `text`
+  - `profile_pic` `text`
+- Foreign key: `id -> auth.users.id` to keep profile rows tied to Supabase users.
+- Screenshots: ![alt text](image-1.png)
+- RLS: enabled Row Level Security and added policies (screenshots below) so authenticated users can insert/select their own row (`auth.uid() = id`).
+  - ![alt text](image-2.png)
+  - ![alt text](image-3.png)
+  - ![alt text](image-4.png)
+- After signup, insert profile row in `user_profiles` (`src/pages/register/index.tsx`):
+  ```tsx
+  const userId = signupResponse.data.user?.id
+  const userProfilesTableData = {
+    id: userId,
+    name: values.name,
+    profile_pic: ''
+  }
+  const userProfileResponse = await supabaseConfig
+    .from('user_profiles')
+    .insert([userProfilesTableData])
+  if (userProfileResponse.error) {
+    throw new Error(userProfileResponse.error.message);
+  }
+  ```
+- New signup guards and persistence (services layer)
+  - Added unique `email` column to `user_profiles`; set unique constraint in Supabase to prevent duplicates.
+  - In `src/services/users.ts`, check for existing email before sign up:
+    ```ts
+    const userExistingResponse = await supabaseConfig
+      .from('user_profiles')
+      .select('*')
+      .eq('email', values.email)
+    if (userExistingResponse.data && userExistingResponse.data.length > 0) {
+      throw new Error("Email already registered. Please login");
+    }
+    ```
+  - Profile insert now stores email along with id/name/profile_pic:
+    ```ts
+    const userProfilesTableData = {
+      id: userId,
+      email: values.email,
+      name: values.name,
+      profile_pic: ''
+    }
+    await supabaseConfig.from('user_profiles').insert([userProfilesTableData])
+    ```
+
+Services layer
+- File: `react-supa-fullstack/src/services/users.ts`
+- Purpose: keep Supabase auth + profile creation logic out of React components for reuse and cleaner UI code.
+- Current export:
+  ```ts
+  import supabaseConfig from "../config/supabase-config";
+
+  export const registerUser = async (values: any) => {
+    try {
+      const signupResponse = await supabaseConfig.auth.signUp({
+        email: values.email,
+        password: values.password
+      })
+      if (signupResponse.error) {
+        throw new Error(signupResponse.error.message)
+      }
+      const userId = signupResponse.data.user?.id
+      const userProfilesTableData = {
+        id: userId,
+        name: values.name,
+        profile_pic: ''
+      }
+      const userProfileResponse = await supabaseConfig.from('user_profiles').insert([userProfilesTableData])
+      if (userProfileResponse.error) {
+        throw new Error(userProfileResponse.error.message);
+      }
+      return {
+        success: true,
+        message: "Registration successful. Please check your Email to verify"
+      }
+    } catch (error: any) {
+      throw new Error(error.message || "Something went wrong")
+    }
+  }
+  ```
+- Usage idea in components: call `registerUser(values)` from the Register form, handle success/error with `messageApi` + `navigate`, while keeping network/auth logic centralized here.
 
 Styles after cleanup
 - Removed `react-supa-fullstack/src/App.css`
