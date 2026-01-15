@@ -1,3 +1,4 @@
+import { message } from "antd";
 import supabaseConfig from "../config/supabase-config";
 
 export const registerUser = async (values: any) => {
@@ -56,3 +57,33 @@ export const loginUser = async (values: any) => {
         throw new Error(error.message || "Something went wrong");
     }
 }
+
+export const getLoggedInUser = async () => {
+    try {
+
+        // step 1 - get the session from supabase
+        const userResponse = await supabaseConfig.auth.getUser();
+        if(userResponse.error) {
+            throw new Error(userResponse.error.message);
+        }
+        // step 2 - get the user from supabase
+        const userId = userResponse.data.user?.id
+        const userProfileResponse = await supabaseConfig.from('user_profiles').select('*').eq('id', userId);
+        if(userProfileResponse.error || userProfileResponse.data.length === 0) {
+            throw new Error(userProfileResponse?.error?.message);
+        }
+        const result = {
+            ...userResponse.data.user,
+            ...userProfileResponse.data[0]
+        }
+        return {
+            success: true,
+            message: "User fetched successfully",
+            data: result
+        }
+        
+    } catch (error: any) {
+        throw new Error(error.message || "Something went wrong")
+    }
+}
+

@@ -1,3 +1,19 @@
+# Table of Contents
+
+1. [Setup Vite](#setup-vite)
+2. [Add Tailwind](#add-tailwind-vite-guide)
+3. [Add Ant Design UI](#add-ant-design-ui)
+4. [AntD Theme Provider](#antd-theme-provider-test)
+5. [Routing Setup](#routing-setup)
+6. [Supabase Setup](#supabase-setup)
+7. [Supabase Auth](#supabase-auth-password--ux-helpers)
+8. [Supabase Custom Attributes](#supabase-custom-attributes-profiles-table)
+9. [Services Layer](#services-layer)
+10. [Styles Cleanup](#styles-after-cleanup)
+11. [Default App](#edit-the-default-app)
+12. [Component vs Styles](#component-vs-styles)
+13. [Comparison](#differences-vs-lovable-project-rg-techshop-we-prod)
+
 Setup Vite
 - Docs: https://vite.dev/guide/
 - Command: `npm create vite@latest`
@@ -317,66 +333,67 @@ Supabase custom attributes (profiles table)
     await supabaseConfig.from('user_profiles').insert([userProfilesTableData])
     ```
 
-Services layer
-- File: `react-supa-fullstack/src/services/users.ts`
-- Purpose: keep Supabase auth + profile creation logic out of React components for reuse and cleaner UI code.
-- Current exports:
+Services Layer
+
+### `registerUser`
+Handles new user registration with the following steps:
+1. Checks if email exists in `user_profiles` table
+2. Creates auth record via Supabase `signUp`
+3. Creates profile record in `user_profiles` table
+4. Returns success message or throws error
+
+Parameters:
+- `values`: Object containing `email`, `password`, and `name`
+
+Returns:
+- Object with `success` boolean and `message` string
+- Throws error if any step fails
+
+### `loginUser`
+Authenticates existing users with:
+1. Supabase `signInWithPassword` call
+2. Error handling for failed attempts
+
+Parameters:
+- `values`: Object containing `email` and `password`
+
+Returns:
+- Object with `success` boolean and `message` string
+- Throws error on authentication failure
+
+### `getLoggedInUser`
+Fetches complete user data by:
+1. Getting current session from Supabase auth
+2. Querying `user_profiles` table for additional data
+3. Merging auth and profile data
+
+Returns:
+- Object with:
+  - `success` boolean
+  - `message` string
+  - `data` containing merged user object
+- Throws error if user not found
+
+Usage Example:
+```ts
+try {
+  const { data: user } = await getLoggedInUser();
+  console.log(user); // { id, email, name, ... }
+} catch (error) {
+  console.error(error.message);
+}
+```
+- Usage in components: call `registerUser(values)` from Register and `loginUser(values)` from Login; handle success/error with AntD `messageApi` + `navigate`, while keeping network/auth logic centralized here.
+- Logged-in user fetch (auth + profile merge):
+  - `getLoggedInUser()` calls `supabaseConfig.auth.getUser()` to read the authenticated user and then fetches the matching `user_profiles` row by `id`.
+  - It merges both objects into one result so UI code can use a single user shape (auth fields + profile fields).
+  - The object spread order matters: later fields (`user_profiles`) override earlier ones if keys collide.
   ```ts
-  import supabaseConfig from "../config/supabase-config";
-
-  export const registerUser = async (values: any) => {
-    try {
-      // check if the email is already registered
-      const userExistingResponse = await supabaseConfig
-        .from('user_profiles')
-        .select('*')
-        .eq('email', values.email)
-      if (userExistingResponse.data && userExistingResponse.data.length > 0) {
-        throw new Error("Email already registered. Please login");
-      }
-      const signupResponse = await supabaseConfig.auth.signUp({
-        email: values.email,
-        password: values.password
-      })
-      if (signupResponse.error) {
-        throw new Error(signupResponse.error.message)
-      }
-      const userId = signupResponse.data.user?.id
-      const userProfilesTableData = {
-        id: userId,
-        email: values.email,
-        name: values.name,
-        profile_pic: ''
-      }
-      const userProfileResponse = await supabaseConfig.from('user_profiles').insert([userProfilesTableData])
-      if (userProfileResponse.error) {
-        throw new Error(userProfileResponse.error.message);
-      }
-      return {
-        success: true,
-        message: "Registration successful. Please check your Email to verify"
-      }
-    } catch (error: any) {
-      throw new Error(error.message || "Something went wrong")
-    }
-  }
-
-  export const loginUser = async (values: any) => {
-    try {
-      const loginResponse = await supabaseConfig.auth.signInWithPassword({
-        email: values.email,
-        password: values.password
-      })
-      if (loginResponse.error) {
-        throw new Error(loginResponse.error.message);
-      }
-      return { success: true, message: "Login successful" }
-    } catch (error: any) {
-      throw new Error(error.message || "Something went wrong");
-    }
+  const result = {
+    ...userResponse.data.user,
+    ...userProfileResponse.data
   }
   ```
-- Usage in components: call `registerUser(values)` from Register and `loginUser(values)` from Login; handle success/error with AntD `messageApi` + `navigate`, while keeping network/auth logic centralized here.
 
 Styles after cleanup
 - Removed `react-supa-fullstack/src/App.css`
@@ -418,3 +435,122 @@ Differences vs. Lovable project (`rg-techshop-we-prod`)
 - Auth/invite UI:
   - `rg-techshop-we-prod/src/pages/Auth.tsx` uses shadcn/ui components, Zod validation, and a dialog to invite users via `supabase.functions.invoke('send-invite', ...)`.
   - This project uses AntD components and can handle validation either with AntD `Form` rules or your own schema logic.
+# Tutorial: Implementing User Profile Editing
+
+This tutorial will guide you through adding a profile editing feature to the application.
+
+## Step 1: Create the Profile Page
+1. Add a new page component at `src/pages/profile/index.tsx`
+2. Use AntD Form components for the edit form
+3. Include fields for name, email, and profile picture
+
+Example code:
+```tsx
+import { Form, Input, Button } from "antd";
+import { useUser } from "../../services/users";
+
+function ProfilePage() {
+  const [user] = useUser();
+  const [form] = Form.useForm();
+  
+  return (
+    <div className="p-5">
+      <Form form={form} initialValues={user}>
+        <Form.Item name="name" label="Name">
+          <Input />
+        </Form.Item>
+        <Form.Item name="email" label="Email">
+          <Input disabled />
+        </Form.Item>
+        {/* Add more fields as needed */}
+      </Form>
+    </div>
+  )
+}
+
+export default ProfilePage;
+```
+
+## Step 2: Add Profile Service Methods
+Extend `src/services/users.ts` with:
+1. `getUserProfile()` - fetches current user's profile
+2. `updateUserProfile()` - updates profile data
+
+Example implementation:
+```ts
+export const updateUserProfile = async (values: any) => {
+  const { data: { user } } = await supabaseConfig.auth.getUser();
+  const response = await supabaseConfig
+    .from('user_profiles')
+    .update(values)
+    .eq('id', user?.id);
+  return response;
+}
+```
+
+## Step 3: Add Route and Navigation
+1. Add the route to `App.tsx`:
+```tsx
+<Route path="/profile" element={<ProfilePage />} />
+```
+2. Add navigation links from other pages using `Link` from `react-router-dom`
+
+## Step 4: Test the Feature
+1. Verify you can view and edit profile data
+2. Check that changes persist in Supabase
+3. Test validation and error handling
+
+# Authentication and User Management
+
+## `getLoggedInUser` Function
+
+The `getLoggedInUser` function in `src/services/users.ts` handles fetching authenticated user data by:
+
+1. Getting the current session from Supabase auth
+2. Fetching the user's profile data from the `user_profiles` table
+3. Merging both data sources into a single user object
+
+Key features:
+- Combines auth and profile data in one call
+- Handles errors gracefully
+- Returns a standardized response format
+
+Example usage:
+```ts
+const { data: user } = await getLoggedInUser();
+console.log(user);
+// {
+//   id: 'user-uuid',
+//   email: 'user@example.com',
+//   name: 'John Doe',
+//   profile_pic: '',
+//   ...other auth fields
+// }
+```
+
+## HomePage Integration
+
+The `HomePage` component in `src/pages/home/index.tsx` uses `getLoggedInUser` to:
+
+1. Check authentication status on mount
+2. Display user information
+3. Redirect to login if not authenticated
+
+Implementation details:
+- Uses React's `useEffect` to fetch data on component mount
+- Manages loading state with `useState`
+- Displays user data when available
+- Shows loading spinner during API calls
+- Redirects to login page if authentication fails
+
+## Profile Management Flow
+
+1. User logs in via `/login`
+2. HomePage checks authentication status
+3. If authenticated, displays user info
+4. If not authenticated, redirects to login
+5. Profile data persists across page reloads
+
+# New Documentation Section
+
+This section contains detailed documentation about the project setup and architecture.
