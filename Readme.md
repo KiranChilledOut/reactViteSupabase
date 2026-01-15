@@ -9,10 +9,16 @@
 7. [Supabase Auth](#supabase-auth-password--ux-helpers)
 8. [Supabase Custom Attributes](#supabase-custom-attributes-profiles-table)
 9. [Services Layer](#services-layer)
-10. [Styles Cleanup](#styles-after-cleanup)
-11. [Default App](#edit-the-default-app)
-12. [Component vs Styles](#component-vs-styles)
-13. [Comparison](#differences-vs-lovable-project-rg-techshop-we-prod)
+10. [User Services Documentation](#user-services-documentation)
+11. [Authentication Flow](#authentication-flow)
+12. [Profile Management](#profile-management)
+13. [Styles Cleanup](#styles-after-cleanup)
+14. [Default App](#edit-the-default-app)
+15. [Component vs Styles](#component-vs-styles)
+16. [Comparison](#differences-vs-lovable-project-rg-techshop-we-prod)
+17. [Tutorial: Profile Editing](#tutorial-implementing-user-profile-editing)
+18. [React Compiler](#react-compiler)
+19. [ESLint Configuration](#expanding-the-eslint-configuration)
 
 Setup Vite
 - Docs: https://vite.dev/guide/
@@ -333,56 +339,131 @@ Supabase custom attributes (profiles table)
     await supabaseConfig.from('user_profiles').insert([userProfilesTableData])
     ```
 
-Services Layer
+## Services Layer
+
+The services layer (`src/services/users.ts`) contains all user-related service functions that interact with Supabase. These functions handle authentication, registration, and user profile management.
+
+### Authentication Flow Overview
+- Public routes (/login, /register) are wrapped in PublicLayout which automatically redirects authenticated users to home ("/")
+- Private routes (/) are wrapped in PrivateLayout
+- `getLoggedInUser()` is used throughout the application to verify authentication status and fetch user data
 
 ### `registerUser`
-Handles new user registration with the following steps:
-1. Checks if email exists in `user_profiles` table
-2. Creates auth record via Supabase `signUp`
-3. Creates profile record in `user_profiles` table
-4. Returns success message or throws error
+Registers a new user with email/password authentication.
 
-Parameters:
-- `values`: Object containing `email`, `password`, and `name`
+**Parameters:**
+- `values` (Object):
+  - `email` (string): User's email address
+  - `password` (string): User's password
+  - `name` (string): User's full name
 
-Returns:
-- Object with `success` boolean and `message` string
-- Throws error if any step fails
+**Returns:**
+- Promise with:
+  - `success` (boolean): Registration success status
+  - `message` (string): Success/error message
 
-### `loginUser`
-Authenticates existing users with:
-1. Supabase `signInWithPassword` call
-2. Error handling for failed attempts
+**Flow:**
+1. Checks if email already exists in `user_profiles` table
+2. Creates auth user in Supabase via `signUp`
+3. Creates corresponding profile in `user_profiles` table
+4. Returns success/error response
 
-Parameters:
-- `values`: Object containing `email` and `password`
+**Throws:**
+- Error if email already registered or Supabase error occurs
 
-Returns:
-- Object with `success` boolean and `message` string
-- Throws error on authentication failure
-
-### `getLoggedInUser`
-Fetches complete user data by:
-1. Getting current session from Supabase auth
-2. Querying `user_profiles` table for additional data
-3. Merging auth and profile data
-
-Returns:
-- Object with:
-  - `success` boolean
-  - `message` string
-  - `data` containing merged user object
-- Throws error if user not found
-
-Usage Example:
+**Example Usage:**
 ```ts
 try {
-  const { data: user } = await getLoggedInUser();
-  console.log(user); // { id, email, name, ... }
+  const result = await registerUser({
+    email: 'user@example.com',
+    password: 'securepassword',
+    name: 'John Doe'
+  });
+  console.log(result.message);
 } catch (error) {
   console.error(error.message);
 }
 ```
+
+### `loginUser`
+Authenticates a user with email/password credentials.
+
+**Parameters:**
+- `values` (Object):
+  - `email` (string): User's email address
+  - `password` (string): User's password
+
+**Returns:**
+- Promise with:
+  - `success` (boolean): Login success status
+  - `message` (string): Success/error message
+
+**Flow:**
+1. Attempts authentication with Supabase via `signInWithPassword`
+2. Returns success/error response
+
+**Throws:**
+- Error if invalid credentials or Supabase error occurs
+
+**Example Usage:**
+```ts
+try {
+  const result = await loginUser({
+    email: 'user@example.com',
+    password: 'securepassword'
+  });
+  console.log(result.message);
+} catch (error) {
+  console.error(error.message);
+}
+```
+
+### `getLoggedInUser`
+Retrieves the currently authenticated user's full profile.
+
+**Returns:**
+- Promise with:
+  - `success` (boolean): Operation success status
+  - `message` (string): Success/error message
+  - `data` (Object): Combined user data from auth and profile tables
+
+**Flow:**
+1. Gets current session from Supabase auth
+2. Fetches user profile from `user_profiles` table
+3. Merges auth and profile data
+4. Returns combined user data
+
+**Throws:**
+- Error if no authenticated user or Supabase error occurs
+
+**Example Usage:**
+```ts
+try {
+  const result = await getLoggedInUser();
+  console.log(result.data); // { id, email, name, ... }
+} catch (error) {
+  console.error(error.message);
+}
+```
+
+### Data Merging Behavior
+When combining auth and profile data:
+- The object spread order matters: later fields (`user_profiles`) override earlier ones if keys collide
+- Example merged user object:
+```ts
+{
+  id: 'auth-uuid',
+  email: 'user@example.com',
+  created_at: '2023-01-01T00:00:00Z', // from auth
+  name: 'John Doe', // from profile
+  profile_pic: '' // from profile
+}
+```
+
+**Authentication Flow:**
+- Public routes (/login, /register) are wrapped in PublicLayout which automatically redirects authenticated users to home ("/")
+- Private routes (/) are wrapped in PrivateLayout
+- `getLoggedInUser()` is used throughout the application to verify authentication status and fetch user data
 - Usage in components: call `registerUser(values)` from Register and `loginUser(values)` from Login; handle success/error with AntD `messageApi` + `navigate`, while keeping network/auth logic centralized here.
 - Logged-in user fetch (auth + profile merge):
   - `getLoggedInUser()` calls `supabaseConfig.auth.getUser()` to read the authenticated user and then fetches the matching `user_profiles` row by `id`.
@@ -550,6 +631,129 @@ Implementation details:
 3. If authenticated, displays user info
 4. If not authenticated, redirects to login
 5. Profile data persists across page reloads
+
+## Authentication Flow
+
+### Password Reset
+The template includes a complete password reset flow:
+1. Users request password reset via `/forgot-password` route
+2. Email with reset link is sent (handled by Supabase)
+3. Reset link directs to `/reset-password` with access token
+4. PublicLayout component excludes reset-password route from redirection
+   ```tsx
+   if (data.session && !location.pathname.includes('reset-password')) {
+       navigate("/");
+   }
+   ```
+5. Users can securely reset their password
+
+## Services
+
+### User Service (`src/services/users.ts`)
+
+The user service provides authentication-related functions:
+
+1. `signUpWithEmail(email: string, password: string)`
+   - Registers a new user with email/password
+   - Returns Promise with user data or error
+
+2. `signInWithEmail(email: string, password: string)`
+   - Authenticates user with email/password
+   - Returns Promise with session data or error
+
+3. `signOut()`
+   - Ends the current user session
+   - Clears any stored authentication tokens
+
+4. `resetPassword(email: string)`
+   - Initiates password reset flow
+   - Sends reset email via Supabase
+   - Returns Promise indicating success/failure
+
+5. `updatePassword(newPassword: string)`
+   - Updates user password after reset confirmation
+   - Requires valid access token
+   - Returns Promise indicating success/failure
+
+6. `getCurrentUser()`
+   - Retrieves currently authenticated user
+   - Returns Promise with user data or null
+
+## Route Protection
+The application uses two main layouts:
+- `PublicLayout`: For auth routes (login, register, password reset)
+- `PrivateLayout`: For authenticated routes
+
+PublicLayout automatically redirects authenticated users away from auth routes, except for the password reset flow.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
+
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
+
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 
 # New Documentation Section
 

@@ -1,6 +1,10 @@
+import PrivateLayout from "./layout/private-layout";
+import PublicLayout from "./layout/public-layout";
+import ForgotPassword from "./pages/forgot-password";
 import HomePage from "./pages/home";
 import LoginPage from "./pages/login";
 import RegisterPage from "./pages/register";
+import ResetPassword from "./pages/reset-password";
 import ThemeProvider from "./theme";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
@@ -9,9 +13,11 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="login" element={<LoginPage />} />
-          <Route path="register" element={<RegisterPage />} />
+          <Route path="/" element={<PrivateLayout><HomePage /></PrivateLayout>} />
+          <Route path="login" element={<PublicLayout><LoginPage /></PublicLayout>} />
+          <Route path="register" element={<PublicLayout><RegisterPage /></PublicLayout>} />
+          <Route path="forgot-password" element={<PublicLayout><ForgotPassword /></PublicLayout>} />
+          <Route path="reset-password" element={<PublicLayout><ResetPassword /></PublicLayout>} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
