@@ -636,6 +636,24 @@ Implementation details:
 
 ### Password Reset
 The template includes a complete password reset flow:
+
+#### Forgot Password Page (`/forgot-password`)
+- Path: `src/pages/forgot-password/index.tsx`
+- Features:
+  - Form with email field validation
+  - Uses Supabase's `resetPasswordForEmail` method
+  - Sets redirect URL to `/reset-password` after email confirmation
+  - Shows success/error messages using AntD notification system
+  - Redirects to login page after successful submission
+
+Implementation details:
+```tsx
+const response = await supabaseConfig.auth.resetPasswordForEmail(values.email, {
+    redirectTo: `${window.location.origin}/reset-password`
+});
+```
+
+#### Reset Flow:
 1. Users request password reset via `/forgot-password` route
 2. Email with reset link is sent (handled by Supabase)
 3. Reset link directs to `/reset-password` with access token

@@ -56,7 +56,7 @@ function LoginPage() {
                         required: true,
                         message: 'Password'
                     }]}>
-                    <Input.Password placeholder="Email ID" />
+                    <Input.Password placeholder="Strong Password" />
 
                 </Form.Item>
                 <Button htmlType="submit" block type="primary" className="" loading={loading} disabled={loading}>

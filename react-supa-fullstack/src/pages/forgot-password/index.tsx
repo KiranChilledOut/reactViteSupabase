@@ -21,7 +21,7 @@ function ForgotPassword() {
                 content: "Password reset email sent. Please check your inbox.",
                 duration: 2,
             });
-            navigate("/");
+            navigate("/login");
 
         } catch (error: any) {
             messageApi.error(error.message || "Something went wrong")
